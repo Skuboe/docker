@@ -1,0 +1,144 @@
+# UNISONを利用しての手動同期
+# 
+# PHP8 MySQL MailHog Python
+#
+# @author kuboe
+# @version 1.0.0
+# @copyright 2023/9
+version: '3'
+networks:
+  aplication_net_unison:
+    name: docker.unison.internal
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.10.0/24
+
+volumes:
+  app-code:
+  
+services:
+  dbunison:
+    container_name: dbunison
+    hostname: local.unison.db
+    command: --default-authentication-plugin=mysql_native_password
+    build: 
+      context: ./
+      dockerfile: _files/db/Dockerfile
+    environment:
+      MYSQL_ROOT_PASSWORD: rootroot
+      MYSQL_DATABASE: trial
+      TZ: "Asia/Tokyo"
+    ports:
+      - 13306:3306
+    volumes:
+      - ./_files/db/persistence/akatsuki/mysql8:/var/lib/mysql
+    networks:
+      aplication_net_unison:
+        ipv4_address: 192.168.10.6
+
+  appunison:
+    container_name: appunison
+    hostname: local.unison.web
+    build:
+      context: ./
+      dockerfile: _files/app/Dockerfile
+    environment:
+      TZ: Asia/Tokyo
+      LANG: ja_JP.UTF-8
+      LANGUAGE: ja_JP.UTF-8
+      LC_ALL: ja_JP.UTF-8
+      #PROXY_HOST: XX.XXX.XXX.XX
+      #PROXY_PORT: XXXX
+      #PROXY_ID: ユーザ名を記載してください
+      #PROXY_PASS: パスワードを記載してください
+    ports:
+      - 80:80
+      - 443:443
+    extra_hosts:
+      - local.test.web-store.jp:192.168.10.10
+      - local.trial.web-store.jp:192.168.10.10
+      - local.laravel.web-store.jp:192.168.10.10
+    depends_on:
+      - unison
+      - dbunison
+      - mailhog
+    # マウントが遅い為必要なディレクトリだけとする。ディレクトリ追加の場合は対応が必要
+    # 自身で不要なマウントを把握しているならコメント行とすることでパフォーマンスが上がる
+    volumes:
+      ## mhsendmail
+      - ./_files/app/mailhog/mail.ini:/etc/php.d/mail.ini:ro
+      
+      ## xDebug
+      - ./_files/app/xdebug_switch.sh:/home/tool/xdebug_switch.sh:ro
+      - ./_files/app/php/php_xdebug_off.ini:/home/tool/php_xdebug_off.ini:ro
+      - ./_files/app/php/php_xdebug_on.ini:/home/tool/php_xdebug_on.ini:ro
+      
+      ## ファイル調整
+      - ./_files/app/auto_adjustment.sh:/home/tool/auto_adjustment.sh:ro
+
+      ## UNISON
+      - app-code:/home:delegated
+      
+      ## ログファイル
+      - ./source/logs/httpd:/var/log/apache2:cached
+      - ./source/logs/app/test/:/home/test/storage/logs
+      - ./source/logs/app/trial/:/home/trial/storage/logs
+      - ./source/logs/app/laravel/:/home/laravel/storage/logs
+    networks:
+      aplication_net_unison:
+        ipv4_address: 192.168.10.10
+        
+  python:
+    container_name: python
+    hostname: local.unison.python
+    build:
+      context: ./
+      dockerfile: ./_files_python/Dockerfile
+    environment:
+      TZ: Asia/Tokyo
+      LANG: ja_JP.UTF-8
+      LANGUAGE: ja_JP.UTF-8
+      LC_ALL: ja_JP.UTF-8
+    ports:
+      - 8000:8000
+    extra_hosts:
+      - local.python.docker.jp:192.168.10.25
+    volumes:
+      - ./source/python/:/home/python/
+    tty: true
+    networks:
+      aplication_net_unison:
+        ipv4_address: 192.168.10.25
+        
+  mailhog:
+    container_name: mailhog
+    hostname: local.unison.mailhog
+    image: mailhog/mailhog:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    restart: unless-stopped
+    networks:
+      aplication_net_unison:
+        ipv4_address: 192.168.10.15
+        
+  # Unisonサーバー
+  unison:
+    container_name: unison
+    image: onnimonni/unison
+    environment:
+      - TZ=Asia/Tokyo
+      - LANG=ja_JP.UTF-8
+      - LANGUAGE=ja_JP.UTF-8
+      - LC_ALL=ja_JP.UTF-8
+      - UNISON_DIR=/tmp/unison # 同期したファイルを書き込むフォルダを指定する
+    ports:
+      - "5000:5000"
+    volumes:
+      - app-code:/tmp/unison # Dockerボリュームをマウントするフォルダを指定する
+    restart: always
+    networks:
+      aplication_net_unison:
+        ipv4_address: 192.168.10.16

@@ -1,0 +1,148 @@
+# 指定したディレクトリを常に同期
+# 
+# PHP8 MySQL MailHog Python
+#
+# @author kuboe
+# @version 1.0.0
+# @copyright 2023/9
+version: '3'
+networks:
+  aplication_net_normal:
+    name: docker.normal.internal
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.20.0/24
+
+services:
+  db:
+    container_name: db
+    hostname: local.db
+    command: --default-authentication-plugin=mysql_native_password
+    build: 
+      context: ./
+      dockerfile: _files/db/Dockerfile
+    environment:
+      MYSQL_ROOT_PASSWORD: rootroot
+      MYSQL_DATABASE: trial
+      TZ: "Asia/Tokyo"
+    ports:
+      - 13306:3306
+    volumes:
+      - ./_files/db/persistence/akatsuki/mysql8:/var/lib/mysql
+    networks:
+      aplication_net_normal:
+        ipv4_address: 192.168.20.6
+  
+  app:
+    container_name: app
+    hostname: local.web
+    build:
+      context: ./
+      dockerfile: _files/app/Dockerfile
+    environment:
+      TZ: Asia/Tokyo
+      LANG: ja_JP.UTF-8
+      LANGUAGE: ja_JP.UTF-8
+      LC_ALL: ja_JP.UTF-8
+      #PROXY_HOST: XX.XXX.XXX.XX
+      #PROXY_PORT: XXXX
+      #PROXY_ID: ユーザ名を記載してください
+      #PROXY_PASS: パスワードを記載してください
+    ports:
+      - 80:80
+      - 443:443
+    extra_hosts:
+      - local.test.web-store.jp:192.168.20.10
+      - local.trial.web-store.jp:192.168.20.10
+      - local.laravel.web-store.jp:192.168.20.10
+    depends_on:
+      - db
+      - mailhog
+    # マウントが遅い為必要なディレクトリだけとする。ディレクトリ追加の場合は対応が必要
+    # 自身で不要なマウントを把握しているならコメント行とすることでパフォーマンスが上がる
+    volumes:
+      ## mhsendmail
+      - ./_files/app/mailhog/mail.ini:/etc/php.d/mail.ini:ro
+      
+      ## xDebug
+      - ./_files/app/xdebug_switch.sh:/home/tool/xdebug_switch.sh:ro
+      - ./_files/app/php/php_xdebug_off.ini:/home/tool/php_xdebug_off.ini:ro
+      - ./_files/app/php/php_xdebug_on.ini:/home/tool/php_xdebug_on.ini:ro
+      
+      ## ファイル調整
+      - ./_files/app/auto_adjustment.sh:/home/tool/auto_adjustment.sh:ro
+      
+      ## test
+      #- ./source/test/app:/home/test/app
+      #- ./source/test/config:/home/test/config
+      #- ./source/test/database:/home/test/database
+      #- ./source/test/resources:/home/test/resources
+      #- ./source/test/routes:/home/test/routes
+      #- ./source/test/public:/home/test/public
+      #- ./source/test/storage:/home/test/storage
+      #- ./source/test/.env:/home/test/.env
+      
+      ## Laravel
+      #- ./source/trial/app:/home/trial/app
+      #- ./source/trial/config:/home/trial/config
+      #- ./source/trial/database:/home/trial/database
+      #- ./source/trial/resources:/home/trial/resources
+      #- ./source/trial/routes:/home/trial/routes
+      #- ./source/trial/public:/home/trial/public
+      #- ./source/trial/storage:/home/trial/storage
+      #- ./source/trial/.env:/home/trial/.env
+      
+      ## Laravel
+      #- ./source/laravel/app:/home/laravel/app
+      #- ./source/laravel/config:/home/laravel/config
+      #- ./source/laravel/database:/home/laravel/database
+      #- ./source/laravel/resources:/home/laravel/resources
+      #- ./source/laravel/routes:/home/laravel/routes
+      #- ./source/laravel/public:/home/laravel/public
+      #- ./source/laravel/storage:/home/laravel/storage
+      #- ./source/laravel/.env:/home/laravel/.env
+      
+      ## ログファイル
+      - ./source/logs/httpd:/var/log/apache2:cached
+      - ./source/logs/app/test/:/home/test/storage/logs
+      - ./source/logs/app/trial/:/home/trial/storage/logs
+      - ./source/logs/app/laravel/:/home/laravel/storage/logs
+    networks:
+      aplication_net_normal:
+        ipv4_address: 192.168.20.10
+        
+  python:
+    container_name: python
+    hostname: local.unison.python
+    build:
+      context: ./
+      dockerfile: ./_files_python/Dockerfile
+    environment:
+      TZ: Asia/Tokyo
+      LANG: ja_JP.UTF-8
+      LANGUAGE: ja_JP.UTF-8
+      LC_ALL: ja_JP.UTF-8
+    ports:
+      - 8000:8000
+    extra_hosts:
+      - local.python.docker.jp:192.168.20.25
+    volumes:
+      - ./source/python/:/home/python/
+    tty: true
+    networks:
+      aplication_net_normal:
+        ipv4_address: 192.168.20.25
+        
+  mailhog:
+    container_name: mailhog
+    hostname: local.unison.mailhog
+    image: mailhog/mailhog:latest
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    restart: unless-stopped
+    networks:
+      aplication_net_normal:
+        ipv4_address: 192.168.20.15
