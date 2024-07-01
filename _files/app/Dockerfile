@@ -1,5 +1,11 @@
 FROM php:8.1-apache
 
+# Debianのバージョンが古く、パッケージのインデックスファイルの置き場所が変更されてしまっているため
+# ビルド時にエラーが出た場合は下記をコメントしてください
+RUN echo "deb http://archive.debian.org/debian/ stretch main contrib non-free" > /etc/apt/sources.list && \
+    echo "deb-src http://archive.debian.org/debian/ stretch main contrib non-free" >> /etc/apt/sources.list && \
+    echo "Acquire::Check-Valid-Until false;" > /etc/apt/apt.conf
+
 # パッケージ追加
 RUN apt-get update && apt-get install -y ssl-cert --no-install-recommends && rm -r /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y libxml2-dev libzip-dev libpq-dev openssl
